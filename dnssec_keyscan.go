@@ -10,6 +10,8 @@ import (
 	"math/big"
 	"strconv"
 	"strings"
+
+	"github.com/cloudflare/circl/sign/ed448"
 )
 
 // NewPrivateKey returns a PrivateKey by parsing the string s.
@@ -66,6 +68,8 @@ func (k *DNSKEY) ReadPrivateKey(q io.Reader, file string) (crypto.PrivateKey, er
 		return priv, nil
 	case ED25519:
 		return readPrivateKeyED25519(m)
+	case ED448:
+		return readPrivateKeyED448(m)
 	default:
 		return nil, ErrAlg
 	}
@@ -137,6 +141,27 @@ func readPrivateKeyED25519(m map[string]string) (ed25519.PrivateKey, error) {
 				return nil, ErrPrivKey
 			}
 			p = ed25519.NewKeyFromSeed(p1)
+		case "created", "publish", "activate":
+			/* not used in Go (yet) */
+		}
+	}
+	return p, nil
+}
+
+func readPrivateKeyED448(m map[string]string) (ed448.PrivateKey, error) {
+	var p ed448.PrivateKey
+	// TODO: validate that the required flags are present
+	for k, v := range m {
+		switch k {
+		case "privatekey":
+			p1, err := fromBase64([]byte(v))
+			if err != nil {
+				return nil, err
+			}
+			if len(p1) != ed448.SeedSize {
+				return nil, ErrPrivKey
+			}
+			p = ed448.NewKeyFromSeed(p1)
 		case "created", "publish", "activate":
 			/* not used in Go (yet) */
 		}

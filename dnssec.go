@@ -18,6 +18,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/cloudflare/circl/sign/ed448"
 )
 
 // DNSSEC encryption algorithm codes.
@@ -75,6 +77,7 @@ var AlgorithmToHash = map[uint8]crypto.Hash{
 	ECDSAP384SHA384:  crypto.SHA384,
 	RSASHA512:        crypto.SHA512,
 	ED25519:          crypto.Hash(0),
+	ED448:            crypto.Hash(0),
 }
 
 // DNSSEC hashing algorithm codes.
@@ -302,7 +305,7 @@ func (rr *RRSIG) Sign(k crypto.Signer, rrset []RR) error {
 	}
 
 	switch rr.Algorithm {
-	case ED25519:
+	case ED25519, ED448:
 		// ed25519 signs the raw message and performs hashing internally.
 		// All other supported signature schemes operate over the pre-hashed
 		// message, and thus ed25519 must be handled separately here.
@@ -362,7 +365,7 @@ func sign(k crypto.Signer, hashed []byte, hash crypto.Hash, alg uint8) ([]byte, 
 		signature := intToBytes(ecdsaSignature.R, intlen)
 		signature = append(signature, intToBytes(ecdsaSignature.S, intlen)...)
 		return signature, nil
-	case ED25519:
+	case ED25519, ED448:
 		return signature, nil
 	default:
 		return nil, ErrAlg
@@ -472,6 +475,17 @@ func (rr *RRSIG) Verify(k *DNSKEY, rrset []RR) error {
 		}
 
 		if ed25519.Verify(pubkey, append(signeddata, wire...), sigbuf) {
+			return nil
+		}
+		return ErrSig
+
+	case ED448:
+		pubkey := k.publicKeyED448()
+		if pubkey == nil {
+			return ErrKey
+		}
+
+		if ed448.Verify(pubkey, append(signeddata, wire...), sigbuf, "") {
 			return nil
 		}
 		return ErrSig
@@ -593,6 +607,17 @@ func (k *DNSKEY) publicKeyED25519() ed25519.PublicKey {
 		return nil
 	}
 	if len(keybuf) != ed25519.PublicKeySize {
+		return nil
+	}
+	return keybuf
+}
+
+func (k *DNSKEY) publicKeyED448() ed448.PublicKey {
+	keybuf, err := fromBase64([]byte(k.PublicKey))
+	if err != nil {
+		return nil
+	}
+	if len(keybuf) != ed448.PublicKeySize {
 		return nil
 	}
 	return keybuf

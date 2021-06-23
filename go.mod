@@ -1,6 +1,6 @@
 module github.com/miekg/dns
 
-go 1.13
+go 1.14
 
 require (
 	github.com/cloudflare/circl v1.0.1-0.20210315192536-3977848c88c6

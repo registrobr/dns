@@ -68,6 +68,27 @@ func TestIsPacketConn(t *testing.T) {
 		t.Error("Unix datagram connection (wrapped type) should be a packet conn")
 	}
 
+	// Unix Seqpacket
+	shutChan, addrstr, err := RunLocalUnixSeqPacketServer(filepath.Join(t.TempDir(), "unixpacket.sock"))
+	if err != nil {
+		t.Fatalf("unable to run test server: %v", err)
+	}
+
+	defer func() {
+		shutChan <- &struct{}{}
+	}()
+	c, err = net.Dial("unixpacket", addrstr)
+	if err != nil {
+		t.Fatalf("failed to dial: %v", err)
+	}
+	defer c.Close()
+	if !isPacketConn(c) {
+		t.Error("Unix datagram connection should be a packet conn")
+	}
+	if !isPacketConn(struct{ *net.UnixConn }{c.(*net.UnixConn)}) {
+		t.Error("Unix datagram connection (wrapped type) should be a packet conn")
+	}
+
 	// Unix stream
 	s, addrstr, _, err = RunLocalUnixServer(filepath.Join(t.TempDir(), "unixstream.sock"))
 	if err != nil {
@@ -257,14 +278,12 @@ func TestClientSyncBadID(t *testing.T) {
 	m := new(Msg)
 	m.SetQuestion("miek.nl.", TypeSOA)
 
+	// Test with client.Exchange, the plain Exchange function is just a wrapper, so
+	// we don't need to test that separately.
 	c := &Client{
-		Timeout: 50 * time.Millisecond,
+		Timeout: 10 * time.Millisecond,
 	}
 	if _, _, err := c.Exchange(m, addrstr); err == nil || !isNetworkTimeout(err) {
-		t.Errorf("query did not time out")
-	}
-	// And now with plain Exchange().
-	if _, err = Exchange(m, addrstr); err == nil || !isNetworkTimeout(err) {
 		t.Errorf("query did not time out")
 	}
 }
@@ -284,14 +303,6 @@ func TestClientSyncBadThenGoodID(t *testing.T) {
 
 	c := new(Client)
 	r, _, err := c.Exchange(m, addrstr)
-	if err != nil {
-		t.Errorf("failed to exchange: %v", err)
-	}
-	if r.Id != m.Id {
-		t.Errorf("failed to get response with expected Id")
-	}
-	// And now with plain Exchange().
-	r, err = Exchange(m, addrstr)
 	if err != nil {
 		t.Errorf("failed to exchange: %v", err)
 	}

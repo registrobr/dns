@@ -359,6 +359,15 @@ func TestParseKnownRRAsRFC3597(t *testing.T) {
 	})
 }
 
+func TestParseOpenEscape(t *testing.T) {
+	if _, err := NewRR("example.net IN CNAME example.net."); err != nil {
+		t.Fatalf("expected no error, but got: %s", err)
+	}
+	if _, err := NewRR("example.net IN CNAME example.org\\"); err == nil {
+		t.Fatalf("expected an error, but got none")
+	}
+}
+
 func BenchmarkNewRR(b *testing.B) {
 	const name1 = "12345678901234567890123456789012345.12345678.123."
 	const s = name1 + " 3600 IN MX 10 " + name1
@@ -415,6 +424,34 @@ func BenchmarkZoneParser(b *testing.B) {
 
 		if err := zp.Err(); err != nil {
 			b.Fatal(err)
+		}
+	}
+}
+
+func TestEscapedStringOffset(t *testing.T) {
+	var cases = []struct {
+		input          string
+		inputOffset    int
+		expectedOffset int
+	}{
+		{"simple string with no escape sequences", 20, 20},
+		{"simple string with no escape sequences", 500, -1},
+		{`\;\088\\\;\120\\`, 0, 0},
+		{`\;\088\\\;\120\\`, 1, 2},
+		{`\;\088\\\;\120\\`, 2, 6},
+		{`\;\088\\\;\120\\`, 3, 8},
+		{`\;\088\\\;\120\\`, 4, 10},
+		{`\;\088\\\;\120\\`, 5, 14},
+		{`\;\088\\\;\120\\`, 6, 16},
+		{`\;\088\\\;\120\\`, 7, -1},
+	}
+	for i, test := range cases {
+		outputOffset := escapedStringOffset(test.input, test.inputOffset)
+		if outputOffset != test.expectedOffset {
+			t.Errorf(
+				"Test %d (input %#q offset %d) returned offset %d but expected %d",
+				i, test.input, test.inputOffset, outputOffset, test.expectedOffset,
+			)
 		}
 	}
 }
